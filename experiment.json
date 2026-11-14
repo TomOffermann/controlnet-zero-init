@@ -1,0 +1,141 @@
+{
+  "training": {
+    "max_steps": 15000,
+    "global_batch": 32,
+    "per_gpu_batch": 8,
+    "lr": 1e-05,
+    "prompt_dropout": 0.5,
+    "canny_low": [
+      50,
+      150
+    ],
+    "canny_high": [
+      150,
+      250
+    ],
+    "resolution": 512,
+    "grad_checkpointing": true,
+    "snapshot_every": 250,
+    "ckpt_every": 500,
+    "log_every": 10,
+    "dense_log_steps": 200,
+    "num_workers": 6,
+    "time_limit_min": 0,
+    "max_train_samples": 0
+  },
+  "variants": {
+    "zero": {
+      "init": "zero",
+      "init_std": 0.0,
+      "init_targets": "all"
+    },
+    "gauss_1e-4": {
+      "init": "gauss",
+      "init_std": 0.0001,
+      "init_targets": "all"
+    },
+    "gauss_1e-3": {
+      "init": "gauss",
+      "init_std": 0.001,
+      "init_targets": "all"
+    },
+    "gauss_1e-2": {
+      "init": "gauss",
+      "init_std": 0.01,
+      "init_targets": "all"
+    },
+    "gauss_1e-1": {
+      "init": "gauss",
+      "init_std": 0.1,
+      "init_targets": "all"
+    },
+    "default": {
+      "init": "default",
+      "init_std": 0.0,
+      "init_targets": "all"
+    },
+    "in_only_default": {
+      "init": "default",
+      "init_std": 0.0,
+      "init_targets": "input"
+    },
+    "out_only_default": {
+      "init": "default",
+      "init_std": 0.0,
+      "init_targets": "output"
+    }
+  },
+  "replicates": [
+    {
+      "suffix": "",
+      "data_seed": 0,
+      "hint_seed": 20230210,
+      "init_seed": 1234
+    },
+    {
+      "suffix": "_seed1",
+      "data_seed": 1,
+      "hint_seed": 1,
+      "init_seed": 1235
+    },
+    {
+      "suffix": "_seed2",
+      "data_seed": 2,
+      "hint_seed": 2,
+      "init_seed": 1236
+    }
+  ],
+  "overrides": {
+    "zero_seed1": {"init_seed": 1234}
+  },
+  "evaluation": {
+    "curves": {
+      "n": 500,
+      "dtype": "fp16",
+      "steps": [
+        0,
+        250,
+        500,
+        750,
+        1000,
+        1250,
+        1500,
+        1750,
+        2000,
+        2500,
+        3000,
+        3500,
+        4000,
+        4500,
+        5000,
+        5500,
+        6000,
+        6500,
+        7000,
+        7500,
+        8000,
+        8500,
+        9000,
+        9500,
+        10000,
+        10500,
+        11000,
+        11500,
+        12000,
+        12500,
+        13000,
+        13500,
+        14000,
+        14500,
+        15000
+      ]
+    },
+    "final": {
+      "n": 2000,
+      "dtype": "fp32",
+      "steps": [
+        15000
+      ]
+    }
+  }
+}
