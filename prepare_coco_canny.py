@@ -46,10 +46,10 @@ def _work(job):
     if bgr is None:
         return False
     rgb = center_crop_resize(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB), res)
-    cv2.imwrite(dst_img, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
+    written = cv2.imwrite(dst_img, cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 95])
     if dst_cond is not None:
-        cv2.imwrite(dst_cond, canny(rgb))
-    return True
+        written = cv2.imwrite(dst_cond, canny(rgb)) and written
+    return written
 
 
 def main():
@@ -96,6 +96,8 @@ def main():
             else:
                 n_bad += 1
     print(f"{args.split}: wrote {len(metas) - n_bad} pairs to {out} ({n_bad} skipped)")
+    if n_bad:
+        raise SystemExit("Preparation incomplete: fix missing/corrupt images or captions and rerun before training.")
 
 
 if __name__ == "__main__":

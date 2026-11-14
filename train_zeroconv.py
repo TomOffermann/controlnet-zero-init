@@ -262,6 +262,32 @@ def copy_drift_rows(step, state, theta0):
     return [[step, s, f"{d2[s] ** 0.5:.6e}", f"{n2[s] ** 0.5:.6e}"] for s in d2]
 
 
+def validate_output(args):
+    """Prevent a restart from silently mixing runs or appending to unrecoverable logs."""
+    out = args.output_dir
+    config_path = os.path.join(out, "config.json")
+    checkpoint = os.path.join(out, "checkpoint", "step.json")
+    has_logs = any(os.path.exists(os.path.join(out, name)) for name in LOG_HEADERS)
+    if has_logs and not os.path.isfile(checkpoint):
+        raise ValueError("Training logs exist but no resumable checkpoint was saved. Use a new output directory.")
+    if os.path.isfile(checkpoint) and not os.path.isfile(config_path):
+        raise ValueError("Checkpoint has no run configuration; use a new output directory.")
+    if os.path.isfile(config_path):
+        with open(config_path) as handle:
+            previous = json.load(handle)["args"]
+        operational = {"output_dir", "max_steps", "per_gpu_batch", "num_workers", "time_limit_min",
+                       "snapshot_every", "ckpt_every", "log_every", "dense_log_steps"}
+        changed = [key for key, value in vars(args).items()
+                   if key not in operational and previous.get(key) != value]
+        if changed:
+            raise ValueError(f"Run settings changed: {', '.join(changed)}. Use a new output directory.")
+    if os.path.isfile(checkpoint):
+        with open(checkpoint) as handle:
+            step = json.load(handle)["step"]
+        if args.max_steps < step:
+            raise ValueError(f"Requested {args.max_steps} updates but checkpoint is already at {step}.")
+
+
 # ----------------------------------------------------------------------------- main
 def main():
     t_start = time.time()  # --time_limit_min counts from here
@@ -279,6 +305,7 @@ def main():
     out = args.output_dir
     main_proc = acc.is_main_process
 
+    validate_output(args)
     os.makedirs(os.path.join(out, "snapshots"), exist_ok=True)
     ckpt_dir = os.path.join(out, "checkpoint")
 

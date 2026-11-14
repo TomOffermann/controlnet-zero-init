@@ -47,7 +47,7 @@ python reproduce.py evaluate --run all --stage curves --execute
 python reproduce.py summarize --stage curves --execute
 ```
 
-Without `--execute`, commands are printed only. Training defaults to two GPUs; add `--gpus 1` to preserve batch 32 through extra gradient accumulation. Evaluation uses one GPU. Runs execute sequentially, resume from their latest checkpoint, and skip completed evaluation pairs. Use a separate `--workspace` if changing settings.
+Without `--execute`, commands are printed only. Training defaults to two GPUs; add `--gpus 1` to preserve batch 32 through extra gradient accumulation. Evaluation uses one GPU. Runs execute sequentially, resume from their latest checkpoint, and skip verified complete evaluation pairs. Use a separate `--workspace` if changing settings. If interrupted before the first checkpoint, restart in a fresh workspace to avoid mixing partial logs.
 
 All settings and seeds are in [`experiment.json`](experiment.json). Run names are `zero`, `gauss_1e-4`, `gauss_1e-3`, `gauss_1e-2`, `gauss_1e-1`, `default`, `in_only_default`, and `out_only_default`; append `_seed1` or `_seed2` for the other replicates. `default` uses PyTorch convolution initialization; the side-specific variants keep the other side zero.
 
@@ -59,3 +59,5 @@ All settings and seeds are in [`experiment.json`](experiment.json). Run names ar
 - Original training used 2× RTX 4090 (24 GB each): approximately 21 GPU-hours per run, 510 across all 24, excluding evaluation. Keeping all 61 snapshots costs about 90 GB per run, plus checkpoints and data; allow over 2 TB for the full sweep.
 
 The repository contains only reproduction code and configuration. Data and trained weights are regenerated. Original model revision hashes were not recorded; later downloads, hardware, and library changes can affect numerical results.
+
+Run the small regression checks with `python -m unittest discover -s tests` (no model downloads).

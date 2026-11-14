@@ -75,7 +75,10 @@ class Inception:
 
 # ----------------------------------------------------------------------------- data / models
 def load_val(data, n):
-    metas = [json.loads(line) for line in open(data / "meta.jsonl")][:n]
+    with open(data / "meta.jsonl") as handle:
+        metas = [json.loads(line) for line in handle][:n]
+    if n < 1 or len(metas) != n:
+        raise ValueError(f"Requested {n} validation images, found {len(metas)} in {data}.")
     for m in metas:
         m["prompt"] = m["captions"][0]
     return metas
@@ -104,7 +107,33 @@ def snapshots(args):
     missing = [s for s in steps if s not in found]
     if missing:
         raise SystemExit(f"snapshots missing in {args.run}: {missing}")
+    if not steps:
+        raise SystemExit(f"No matching snapshots in {args.run}")
     return [(s, found[s]) for s in sorted(steps)]
+
+
+def completed_pair(out, mode, settings):
+    """A JSON marker is complete only with matching settings and readable result files."""
+    marker = out / f"{mode}.json"
+    try:
+        saved = json.loads(marker.read_text())
+    except (OSError, ValueError):
+        return False
+    if not isinstance(saved, dict) or not {"f1", "f1_sem", "precision", "recall", "n", "settings"} <= saved.keys():
+        return False
+    if saved["settings"] != settings:
+        raise ValueError(f"Evaluation settings changed for {marker}. Use a separate output directory.")
+    try:
+        features = np.load(out / f"{mode}.npy", mmap_mode="r")
+        with open(out / f"{mode}.csv", newline="") as handle:
+            rows = list(csv.reader(handle))
+        if features.shape != (settings["n"], 2048) or len(rows) != settings["n"] + 1:
+            return False
+        if rows[0] != ["id", "f1", "precision", "recall"] or any(len(row) != 4 for row in rows):
+            return False
+    except (OSError, ValueError, EOFError):
+        return False
+    return True
 
 
 def build_pipeline(args, dev, dtype):
@@ -144,8 +173,16 @@ def main():
         np.save(out, np.concatenate(feats))
         print(f"real: {len(metas)} images -> {out}")
         return
-    todo = [(s, p, m) for s, p in snapshots(args) for m in args.modes
-            if not (args.out / args.name / f"step_{s:06d}" / f"{m}.json").exists()]
+    todo = []
+    for step, path in snapshots(args):
+        for mode in args.modes:
+            settings = {"steps": args.steps, "guidance": MODES[mode], "dtype": str(dtype), "tol": args.tol,
+                        "sampler": "UniPC", "snapshot": str(path) if path else args.controlnet,
+                        "snapshot_mtime_ns": path.stat().st_mtime_ns if path else None,
+                        "pretrained": args.pretrained, "data": str(args.data.resolve()),
+                        "n": args.n, "batch": args.batch}
+            if not completed_pair(args.out / args.name / f"step_{step:06d}", mode, settings):
+                todo.append((step, path, mode, settings))
     print(f"{args.name}: {len(metas)} val images, {len(todo)} (snapshot, mode) pairs to do on {dev} {dtype}",
           flush=True)
     if not todo:
@@ -155,13 +192,15 @@ def main():
     conds = [cv2.imread(str(args.data / "canny" / f"{m['id']}.png"), cv2.IMREAD_GRAYSCALE) for m in metas]
     res = conds[0].shape[0]
     loaded = None
-    for step, path, mode in todo:
+    for step, path, mode, settings in todo:
         t0 = time.time()
         if path is not None and loaded != path:
             cn.load_state_dict(load_file(str(path)))  # fp32 snapshot -> pipeline dtype
             loaded = path
         out = args.out / args.name / f"step_{step:06d}"
         out.mkdir(parents=True, exist_ok=True)
+        marker = out / f"{mode}.json"
+        marker.unlink(missing_ok=True)  # invalidate an incomplete pair before rewriting its files
         rows, feats = [], []
         for b0 in range(0, len(metas), args.batch):
             idx = range(b0, min(b0 + args.batch, len(metas)))
@@ -184,9 +223,11 @@ def main():
         summary = {"name": args.name, "step": step, "mode": mode, "n": int(ok.sum()),
                    "f1": f1[ok].mean(), "f1_sem": f1[ok].std(ddof=1) / np.sqrt(ok.sum()) if ok.sum() > 1 else 0.0,
                    "precision": prec[ok].mean(), "recall": rec[ok].mean(),
-                   "settings": {"steps": args.steps, "guidance": MODES[mode], "dtype": str(dtype), "tol": args.tol,
-                                "sampler": "UniPC", "snapshot": str(path) if path else args.controlnet}}
-        json.dump(summary, open(out / f"{mode}.json", "w"), indent=1)  # written last = marks this pair as done
+                   "settings": settings}
+        temporary = marker.with_suffix(".json.tmp")
+        with temporary.open("w") as handle:
+            json.dump(summary, handle, indent=1)
+        temporary.replace(marker)  # publish a complete marker only after both result files exist
         print(f"  step {step:>6} {mode:8s} F1 {summary['f1']:.4f} ± {summary['f1_sem']:.4f}  "
               f"({time.time() - t0:.0f} s)", flush=True)
 
